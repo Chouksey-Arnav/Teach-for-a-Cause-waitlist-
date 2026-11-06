@@ -1,47 +1,32 @@
 # Teach for a Cause waitlist
 
-A standalone Next.js (App Router) + Tailwind waitlist page with a Supabase backend. It is its own project and its own link, separate from the main site.
+Standalone Next.js (App Router) + Tailwind waitlist with Supabase and email code (OTP) verification sent through Gmail with Nodemailer.
 
-## What is in here
-- `app/page.tsx` the landing page (nav, hero with form, instruments, how it works, safety, tutors, FAQ, footer)
-- `components/WaitlistForm.tsx` the form and success screen
-- `app/api/waitlist/route.ts` validation (zod), honeypot, IP rate limit, insert, optional real count
-- `supabase/migrations/20261105000000_waitlist.sql` tables, RLS, helper functions, 30 day cleanup job
+## How joining works
+1. Someone fills the form. `POST /api/waitlist/start` checks it, rate limits by IP, stores a hashed 6 digit code, and emails the code.
+2. They type the code. `POST /api/waitlist/verify` checks it. Five wrong tries lock that code, and codes expire after 10 minutes.
+3. Only after a correct code does the row go into `waitlist_signups`.
 
-## Environment variables
-Set these in `.env.local` and in Vercel (Project Settings, Environment Variables). See `.env.example`.
-| Name | What it is |
-|---|---|
-| SUPABASE_URL | Your project URL |
-| SUPABASE_PUBLISHABLE_KEY | The publishable (anon) key. Safe to use because every write goes through RLS |
-| RATE_LIMIT_SALT | Any long random string. IPs are hashed with it, raw IPs are never stored |
-| WAITLIST_SHOW_COUNTS | `true` to show a real count of waiting families on the parent success screen |
-| NEXT_PUBLIC_SITE_URL | Your deployed URL, for Open Graph links |
+All database writes happen on the server with the Supabase service role key. The public key has no access to the waitlist tables.
+
+## Gmail setup
+1. Use a Gmail account just for this. People will see its address as the sender.
+2. Turn on 2 Step Verification: https://myaccount.google.com/security
+3. Create an app password: https://myaccount.google.com/apppasswords (name it "TFAC waitlist"). Google shows 16 letters. Paste them as `GMAIL_APP_PASSWORD`. Spaces are fine, the code removes them.
+4. Free Gmail allows roughly 500 emails a day. First emails from a new sender can land in spam, so the page tells people to check there.
+
+## Environment variables (.env.local and Vercel)
+See `.env.example`. Generate `OTP_SECRET` and `RATE_LIMIT_SALT` with `openssl rand -hex 32`. Get `SUPABASE_SERVICE_ROLE_KEY` from Supabase, Project Settings, API. Never use a NEXT_PUBLIC_ prefix on any of them except `NEXT_PUBLIC_SITE_URL`.
+
+## Database
+Run the files in `supabase/migrations` in order (waitlist, then waitlist_otp). A daily job removes rows 30 days after `notified_at` and clears expired codes.
 
 ## Run locally
 ```
 npm install
 npm run dev
 ```
-Open http://localhost:3000. Fill the form, then check the `waitlist_signups` table in the Supabase dashboard.
-
-Test the API directly:
-```
-# Should return field errors
-curl -s -XPOST localhost:3000/api/waitlist -H 'content-type: application/json' \
-  -d '{"role":"parent","email":"nope","grade":"9","instrument":"Kazoo"}'
-
-# Should save one row (run it twice, you still get one row)
-curl -s -XPOST localhost:3000/api/waitlist -H 'content-type: application/json' \
-  -d '{"role":"parent","email":"Test@Example.com","grade":"7","instrument":"Flute","county":"Wake"}'
-
-# Honeypot, returns ok and saves nothing
-curl -s -XPOST localhost:3000/api/waitlist -H 'content-type: application/json' -d '{"company":"bot"}'
-```
-The sixth request from one IP inside an hour returns a 429 (limit is 5 per hour, change it in `waitlist_rate_ok`).
-
-## Deploy
-Push to GitHub, import into Vercel, add the env vars, deploy. Put a real Open Graph URL in NEXT_PUBLIC_SITE_URL after you know the domain.
+Submit the form with an email you can read, enter the code, then check `waitlist_signups` in Supabase.
 
 ## Notifying people later
-When you email a group, set `status = 'notified'` and `notified_at = now()` for those rows (SQL editor or service role). The daily job deletes rows 30 days after `notified_at`.
+Set `status = 'notified'` and `notified_at = now()` on the rows you emailed.
