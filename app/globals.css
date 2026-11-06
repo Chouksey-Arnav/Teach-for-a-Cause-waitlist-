@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F8F6EE; --card: #FDFCF8; --soft: #EFEBDD; --ink: #2A2622; --muted: #675F56;
+  --line: #DDD8C8; --clay: #A8482A; --clay-ink: #FFFFFF;
+}
+[data-theme="dark"] {
+  --bg: #1B1916; --card: #23201C; --soft: #2B2722; --ink: #F2EEE4; --muted: #B9B1A4;
+  --line: #39342D; --clay: #E58F68; --clay-ink: #1B1916;
+}
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans), system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; border-radius: 6px; }
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] .chev { transform: rotate(45deg); }
+.chev { transition: transform 0.15s ease; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
