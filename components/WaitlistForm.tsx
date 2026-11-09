@@ -120,7 +120,7 @@ export default function WaitlistForm() {
         <p className="mt-4 text-base leading-relaxed text-muted">
           {done.role === "parent"
             ? `We’ll send one email when someone who plays ${done.instrument} joins as a tutor.`
-            : `We’ll send one email to your parent or guardian when it’s time to set up tutoring for ${done.instrument}.`}{" "}
+            : `We’ll send one email when it’s time to set up tutoring for ${done.instrument}.`}{" "}
           Besides your code, that’s the only email, and we delete the address within 30 days of sending it.
         </p>
         {done.count !== null && (
@@ -184,10 +184,16 @@ export default function WaitlistForm() {
         </fieldset>
 
         <div className="mt-5">
-          <label htmlFor="email" className={label}>Parent or guardian email</label>
+          <label htmlFor="email" className={label}>
+            {role === "parent" ? "Parent or guardian email" : "Your email"}
+          </label>
           <input id="email" name="email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false}
             required aria-required="true" className={input} placeholder="name@example.com" {...aria("email")} />
-          <p className="mt-1.5 text-sm text-muted">Students: ask a parent to fill this in. We’ll email a code to this address.</p>
+          <p className="mt-1.5 text-sm text-muted">
+            {role === "parent"
+              ? "Students: ask a parent to fill this in. We’ll email a code to this address."
+              : "We’ll email a code to this address."}
+          </p>
           <Err k="email" />
         </div>
 

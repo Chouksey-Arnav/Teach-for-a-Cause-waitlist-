@@ -109,7 +109,7 @@ export default function Page() {
             <a href="/?role=tutor#join" className="mt-6 inline-flex h-12 items-center rounded-xl bg-clay px-6 text-base font-semibold text-clay-ink hover:opacity-90">
               Join as a tutor
             </a>
-            <p className="mt-3 text-sm text-muted">You’ll need a parent or guardian email.</p>
+            <p className="mt-3 text-sm text-muted">You’ll need your email to verify with a code.</p>
           </div>
         </section>
 
