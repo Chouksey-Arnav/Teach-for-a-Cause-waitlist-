@@ -89,13 +89,19 @@ export default function AdminPage() {
         headers["x-admin-key"] = keyToUse;
       }
 
-      const res = await fetch("/api/admin/signups", { headers, cache: "no-store" });
+      // Add timestamp param to bypass any intermediate caching proxies
+      const res = await fetch(`/api/admin/signups?_t=${Date.now()}`, {
+        headers,
+        cache: "no-store",
+      });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         if (res.status === 401) {
           setError("Admin access key required.");
         } else {
-          setError(data.error || "Failed to load database records.");
+          if (!isSilent) {
+            setError(data.error || "Failed to load database records.");
+          }
         }
       } else {
         setSignups(data.signups);
@@ -103,7 +109,9 @@ export default function AdminPage() {
         setError(null);
       }
     } catch {
-      setError("Network error: Could not reach the server.");
+      if (!isSilent) {
+        setError("Network error: Could not reach the server.");
+      }
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -118,13 +126,28 @@ export default function AdminPage() {
     fetchSignups();
   }, [fetchSignups]);
 
-  // Real-time polling sync (every 6 seconds if enabled)
+  // Real-time polling sync (every 5 seconds if enabled) & on window focus / visibility change
   useEffect(() => {
     if (!autoRefresh) return;
+
     const timer = setInterval(() => {
       fetchSignups(true);
-    }, 6000);
-    return () => clearInterval(timer);
+    }, 5000);
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchSignups(true);
+      }
+    };
+
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
+    };
   }, [autoRefresh, fetchSignups]);
 
   // Update status (mark notified / waiting)

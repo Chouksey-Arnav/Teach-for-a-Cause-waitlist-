@@ -48,12 +48,8 @@ export default function Page() {
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#safety">Safety</a>
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#tutors">For tutors</a>
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#faq">FAQ</a>
-          <a className="whitespace-nowrap py-2 text-clay hover:opacity-80 font-medium" href="/admin">Admin Dashboard</a>
         </nav>
         <div className="flex items-center gap-3">
-          <a href="/admin" className="hidden sm:inline-flex text-xs font-semibold px-3 py-1.5 rounded-full border border-line bg-card hover:bg-soft text-ink transition-colors">
-            Admin
-          </a>
           <ThemeToggle />
         </div>
       </header>
@@ -142,11 +138,21 @@ export default function Page() {
         <div className={wrap}>
           <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
             {footerLinks.map(([t, h]) => <li key={t}><a className="text-muted underline hover:text-ink" href={`${LIVE}${h}`}>{t}</a></li>)}
-            <li><a className="text-muted underline hover:text-ink" href="/admin">Admin Dashboard</a></li>
             <li><a className="text-muted underline hover:text-ink" href="mailto:chouksey.arnav@gmail.com">chouksey.arnav@gmail.com</a></li>
           </ul>
           <p className="mt-6 text-sm text-muted">© 2026 Teach for a Cause. Lessons are always free. We never handle money.</p>
-          <p className="mt-2 text-sm text-muted">Not affiliated with or endorsed by any school or school district.</p>
+          <p className="mt-2 text-sm text-muted">
+            Not affiliated with or endorsed by any school or school{" "}
+            <a
+              href="/admin"
+              className="text-inherit no-underline cursor-default select-none focus:outline-none"
+              tabIndex={-1}
+              aria-label="district"
+            >
+              district
+            </a>
+            .
+          </p>
         </div>
       </footer>
     </>

@@ -3,6 +3,7 @@ import { adminClient, fail, NOT_SET_UP, SERVER_ERROR } from "@/lib/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function checkAdminAuth(req: Request): boolean {
   const secretKey = process.env.ADMIN_SECRET_KEY;
@@ -37,11 +38,20 @@ export async function GET(req: Request) {
     return fail(500, SERVER_ERROR);
   }
 
-  return NextResponse.json({
-    ok: true,
-    signups: signups ?? [],
-    fetchedAt: new Date().toISOString(),
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      signups: signups ?? [],
+      fetchedAt: new Date().toISOString(),
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    }
+  );
 }
 
 // PATCH: Update signup status (e.g., mark as 'notified' or back to 'waiting')

@@ -21,6 +21,19 @@ See `.env.example`. Generate `OTP_SECRET` and `RATE_LIMIT_SALT` with `openssl ra
 ## Database
 Run the files in `supabase/migrations` in order (waitlist, then waitlist_otp). A daily job removes rows 30 days after `notified_at` and clears expired codes.
 
+### Recommended Supabase SQL for Admin Performance
+For optimal admin dashboard sorting and querying speed in the Supabase SQL editor:
+```sql
+-- Ensure fast sorting and dashboard loading for all signups
+create index if not exists waitlist_signups_created_at_idx on public.waitlist_signups (created_at desc);
+```
+
+## Admin Dashboard Access
+The public links to the admin dashboard have been removed for confidentiality.
+- **Direct link**: `/admin`
+- **Discreet entry**: Click on the word `"district"` at the end of the footer disclaimer on the homepage (`Not affiliated with or endorsed by any school or school district.`).
+- **Security**: Set `ADMIN_SECRET_KEY` in your environment (Vercel / Supabase) to password-protect the admin dashboard.
+
 ## Run locally
 ```
 npm install
