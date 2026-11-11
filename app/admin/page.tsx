@@ -17,6 +17,18 @@ export interface WaitlistRecord {
   notified_at: string | null;
 }
 
+export interface OtpRecord {
+  id: string;
+  email: string;
+  role: "parent" | "tutor";
+  grade: number;
+  instrument: string;
+  county: string | null;
+  attempts: number;
+  expires_at: string;
+  created_at: string;
+}
+
 // Convert grade to standard school age estimation
 function getEstimatedAge(grade: number): string {
   // Grade 6: ~11-12, Grade 7: ~12-13, Grade 8: ~13-14
@@ -61,12 +73,17 @@ function formatDate(iso: string) {
 
 export default function AdminPage() {
   const [signups, setSignups] = useState<WaitlistRecord[]>([]);
+  const [otps, setOtps] = useState<OtpRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [adminKey, setAdminKey] = useState("");
+  const [password, setPassword] = useState("");
+  const [inputPassword, setInputPassword] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<WaitlistRecord | null>(null);
+  const [activeTab, setActiveTab] = useState<"signups" | "otps">("signups");
 
   // Filters & Controls
   const [search, setSearch] = useState("");
@@ -79,17 +96,19 @@ export default function AdminPage() {
   const [sortAsc, setSortAsc] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
-  const fetchSignups = useCallback(async (isSilent = false) => {
+  const fetchSignups = useCallback(async (isSilent = false, overridePassword?: string) => {
     if (!isSilent) setLoading(true);
     try {
       const headers: Record<string, string> = {};
-      const storedKey = typeof window !== "undefined" ? localStorage.getItem("tfac_admin_key") : "";
-      const keyToUse = adminKey || storedKey || "";
-      if (keyToUse) {
-        headers["x-admin-key"] = keyToUse;
+      const storedPass = typeof window !== "undefined"
+        ? localStorage.getItem("tfac_admin_password") || localStorage.getItem("tfac_admin_key") || ""
+        : "";
+      const passToUse = overridePassword !== undefined ? overridePassword : (password || storedPass);
+
+      if (passToUse) {
+        headers["x-admin-password"] = passToUse;
       }
 
-      // Add timestamp param to bypass any intermediate caching proxies
       const res = await fetch(`/api/admin/signups?_t=${Date.now()}`, {
         headers,
         cache: "no-store",
@@ -97,34 +116,65 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         if (res.status === 401) {
-          setError("Admin access key required.");
+          setIsAuthenticated(false);
+          setAuthError(data.error || "Incorrect password. Please enter your admin password.");
         } else {
           if (!isSilent) {
-            setError(data.error || "Failed to load database records.");
+            setErrorMessage(data.error || "Failed to load database records.");
           }
         }
+        return false;
       } else {
-        setSignups(data.signups);
+        setSignups(data.signups || []);
+        setOtps(data.otps || []);
         setLastSynced(new Date());
-        setError(null);
+        setIsAuthenticated(true);
+        setAuthError(null);
+        setErrorMessage(null);
+        return true;
       }
     } catch {
       if (!isSilent) {
-        setError("Network error: Could not reach the server.");
+        setErrorMessage("Network error: Could not reach the server.");
       }
+      return false;
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [adminKey]);
+  }, [password]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("tfac_admin_key");
-    if (stored) setAdminKey(stored);
+    const stored = localStorage.getItem("tfac_admin_password") || localStorage.getItem("tfac_admin_key") || "";
+    if (stored) {
+      setPassword(stored);
+      setInputPassword(stored);
+    }
   }, []);
 
   useEffect(() => {
     fetchSignups();
   }, [fetchSignups]);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputPassword.trim();
+    setLoading(true);
+    const ok = await fetchSignups(false, trimmed);
+    if (ok) {
+      setPassword(trimmed);
+      localStorage.setItem("tfac_admin_password", trimmed);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("tfac_admin_password");
+    localStorage.removeItem("tfac_admin_key");
+    setPassword("");
+    setInputPassword("");
+    setIsAuthenticated(false);
+    setSignups([]);
+    setOtps([]);
+  };
 
   // Real-time polling sync (every 5 seconds if enabled) & on window focus / visibility change
   useEffect(() => {
@@ -156,7 +206,8 @@ export default function AdminPage() {
     setActionInProgress(record.id);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (adminKey) headers["x-admin-key"] = adminKey;
+      const currentPassword = password || localStorage.getItem("tfac_admin_password") || "";
+      if (currentPassword) headers["x-admin-password"] = currentPassword;
 
       const res = await fetch("/api/admin/signups", {
         method: "PATCH",
@@ -187,7 +238,8 @@ export default function AdminPage() {
     setActionInProgress(record.id);
     try {
       const headers: Record<string, string> = {};
-      if (adminKey) headers["x-admin-key"] = adminKey;
+      const currentPassword = password || localStorage.getItem("tfac_admin_password") || "";
+      if (currentPassword) headers["x-admin-password"] = currentPassword;
 
       const res = await fetch(`/api/admin/signups?id=${encodeURIComponent(record.id)}`, {
         method: "DELETE",
@@ -278,6 +330,66 @@ export default function AdminPage() {
   const waitingCount = signups.filter((s) => s.status === "waiting").length;
   const notifiedCount = signups.filter((s) => s.status === "notified").length;
 
+  // If not authenticated (401 from server) and loading is finished, display clean password lock screen
+  if (!isAuthenticated && !loading) {
+    return (
+      <div className="min-h-screen bg-bg text-ink flex flex-col justify-between">
+        <header className="border-b border-line bg-card px-6 py-4 flex items-center justify-between">
+          <a href="/" className="font-serif text-xl font-bold tracking-tight hover:opacity-80">
+            Teach for a Cause
+          </a>
+          <ThemeToggle />
+        </header>
+
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl border border-line bg-card p-8 shadow-xl text-center">
+            <div className="w-14 h-14 rounded-2xl bg-soft border border-line flex items-center justify-center mx-auto mb-5 text-2xl">
+              🔒
+            </div>
+            <h1 className="font-serif text-2xl font-bold tracking-tight text-ink">
+              Admin Password
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              Please enter your admin password to access all Supabase waitlist registrations and data.
+            </p>
+
+            {authError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-900 text-xs font-semibold text-red-800 dark:text-red-300">
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleLoginSubmit} className="mt-6 space-y-3">
+              <input
+                type="password"
+                placeholder="Password"
+                autoFocus
+                value={inputPassword}
+                onChange={(e) => setInputPassword(e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border border-line bg-bg text-sm text-ink placeholder:text-muted focus:outline-clay"
+              />
+              <button
+                type="submit"
+                disabled={loading || !inputPassword.trim()}
+                className="w-full h-11 rounded-xl bg-clay text-clay-ink font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? "Checking…" : "Unlock Dashboard"}
+              </button>
+            </form>
+
+            <div className="mt-6 text-xs text-muted">
+              Configure in Vercel with the <code className="font-mono bg-soft px-1.5 py-0.5 rounded text-[11px] text-ink">ADMIN_PASSWORD</code> environment variable.
+            </div>
+          </div>
+        </main>
+
+        <footer className="border-t border-line py-4 bg-card text-center text-xs text-muted">
+          Teach for a Cause · Confidential Admin Portal
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg text-ink flex flex-col">
       {/* Top Header */}
@@ -292,7 +404,7 @@ export default function AdminPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Real-time Indicator & Sync Status */}
             <div className="hidden sm:flex items-center gap-2 text-xs text-muted border border-line rounded-full px-3 py-1 bg-soft/50">
               <span className={`inline-block h-2 w-2 rounded-full ${autoRefresh ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
@@ -308,21 +420,30 @@ export default function AdminPage() {
               type="button"
               onClick={() => setAutoRefresh(!autoRefresh)}
               title={autoRefresh ? "Pause automatic polling" : "Resume real-time polling"}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-line hover:bg-soft transition-colors"
+              className="text-xs font-medium px-2.5 sm:px-3 py-1.5 rounded-lg border border-line hover:bg-soft transition-colors"
             >
-              {autoRefresh ? "Pause Live" : "Resume Live"}
+              {autoRefresh ? "Pause" : "Resume"}
             </button>
 
             <button
               type="button"
               onClick={() => fetchSignups(false)}
               disabled={loading}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-clay text-clay-ink hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5"
+              className="text-xs font-medium px-2.5 sm:px-3 py-1.5 rounded-lg bg-clay text-clay-ink hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5"
             >
               <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               <span>Refresh</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Lock dashboard and sign out"
+              className="text-xs font-medium px-2.5 sm:px-3 py-1.5 rounded-lg border border-line text-muted hover:text-ink hover:bg-soft transition-colors"
+            >
+              Lock
             </button>
 
             <ThemeToggle />
@@ -336,10 +457,10 @@ export default function AdminPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
           <div>
             <h1 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight">
-              Student & Tutor Waitlist Dashboard
+              Supabase Waitlist Dashboard
             </h1>
             <p className="mt-1 text-sm sm:text-base text-muted">
-              Real-time overview of student and musician registrations, ages, contact emails, and onboarding statuses.
+              Live view of all verified registrations and active verification sessions connected to Supabase.
             </p>
           </div>
 
@@ -366,6 +487,45 @@ export default function AdminPage() {
               </svg>
             </a>
           </div>
+        </div>
+
+        {errorMessage && (
+          <div className="mt-4 p-4 rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 text-sm text-amber-800 dark:text-amber-200">
+            {errorMessage}
+          </div>
+        )}
+
+        {/* Database Table Tabs */}
+        <div className="mt-6 flex items-center gap-3 border-b border-line pb-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("signups")}
+            className={`pb-2.5 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === "signups"
+                ? "border-clay text-clay"
+                : "border-transparent text-muted hover:text-ink"
+            }`}
+          >
+            <span>Verified Signups (waitlist_signups)</span>
+            <span className="rounded-full bg-soft px-2 py-0.5 text-xs text-muted border border-line">
+              {signups.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("otps")}
+            className={`pb-2.5 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === "otps"
+                ? "border-clay text-clay"
+                : "border-transparent text-muted hover:text-ink"
+            }`}
+          >
+            <span>Pending OTPs (waitlist_otps)</span>
+            <span className="rounded-full bg-soft px-2 py-0.5 text-xs text-muted border border-line">
+              {otps.length}
+            </span>
+          </button>
         </div>
 
         {/* Real-time Summary Stat Cards */}
@@ -428,39 +588,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Optional Admin Passkey banner if unauthorized */}
-        {error && (
-          <div className="mt-6 rounded-2xl border border-clay bg-soft/80 p-5 text-sm">
-            <div className="font-semibold text-clay mb-1.5 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span>{error}</span>
-            </div>
-            <p className="text-muted mb-3">
-              If an ADMIN_SECRET_KEY is configured in your environment, enter it below to authenticate this session.
-            </p>
-            <div className="flex max-w-md gap-2">
-              <input
-                type="password"
-                placeholder="Enter Admin Secret Key"
-                value={adminKey}
-                onChange={(e) => setAdminKey(e.target.value)}
-                className="h-10 flex-1 rounded-xl border border-line bg-bg px-3 text-sm text-ink focus:outline-clay"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  localStorage.setItem("tfac_admin_key", adminKey);
-                  fetchSignups(false);
-                }}
-                className="h-10 px-4 rounded-xl bg-clay text-clay-ink font-semibold text-sm hover:opacity-90 transition-opacity"
-              >
-                Authenticate
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Filter & Navigation Bar */}
         <div className="mt-8 rounded-2xl border border-line bg-card p-4 sm:p-5 shadow-sm space-y-4">
@@ -621,8 +748,74 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Main Records Display (Table or Cards) */}
-        {loading && signups.length === 0 ? (
+        {/* Tab 2: Pending OTP Verification Sessions */}
+        {activeTab === "otps" && (
+          <div className="mt-4">
+            {otps.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line bg-card/60 p-12 text-center">
+                <p className="font-medium text-ink">No active verification sessions in Supabase</p>
+                <p className="text-xs text-muted mt-1">Codes expire automatically after 10 minutes or upon successful confirmation.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-line bg-card shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-line bg-soft/50 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                        <th className="py-3.5 px-4">Email</th>
+                        <th className="py-3.5 px-4">Role</th>
+                        <th className="py-3.5 px-4">Grade & Instrument</th>
+                        <th className="py-3.5 px-4">County</th>
+                        <th className="py-3.5 px-4">Attempts</th>
+                        <th className="py-3.5 px-4">Expires</th>
+                        <th className="py-3.5 px-4">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {otps.map((o) => {
+                        const isExpired = new Date(o.expires_at) < new Date();
+                        const isLocked = o.attempts >= 5;
+
+                        return (
+                          <tr key={o.id} className="hover:bg-soft/40 transition-colors">
+                            <td className="py-3 px-4 font-semibold text-ink">{o.email}</td>
+                            <td className="py-3 px-4">
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-soft border border-line">
+                                {o.role === "parent" ? "Student" : "Tutor"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-xs">
+                              Grade {o.grade} · {o.instrument}
+                            </td>
+                            <td className="py-3 px-4 text-xs text-muted">
+                              {o.county || "N/A"}
+                            </td>
+                            <td className="py-3 px-4 text-xs">
+                              <span className={o.attempts > 0 ? "text-amber-600 font-bold" : "text-muted"}>
+                                {o.attempts} / 5
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-xs whitespace-nowrap">
+                              <span className={isExpired ? "text-red-500 font-medium" : "text-green-600"}>
+                                {isLocked ? "Locked" : isExpired ? "Expired" : "Pending entry"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-xs text-muted whitespace-nowrap">
+                              {formatDate(o.created_at)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 1: Verified Signups Display (Table or Cards) */}
+        {activeTab === "signups" && (loading && signups.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-line bg-card p-12 text-center text-muted">
             <svg className="w-8 h-8 animate-spin mx-auto mb-3 text-clay" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -839,7 +1032,7 @@ export default function AdminPage() {
               );
             })}
           </div>
-        )}
+        ))}
       </main>
 
       {/* Interactive Detail Drawer Modal */}
