@@ -39,14 +39,23 @@ export default function Page() {
       <a href="#join" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2">Skip to the form</a>
 
       <header className={`${wrap} flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-4`}>
-        <a href={LIVE} className="font-serif text-xl">Teach for a Cause</a>
+        <div className="flex items-center gap-3">
+          <a href={LIVE} className="font-serif text-xl">Teach for a Cause</a>
+          <span className="text-xs text-muted border border-line rounded-full px-2.5 py-0.5">Waitlist</span>
+        </div>
         <nav aria-label="Main" className="order-3 flex w-full gap-5 overflow-x-auto text-sm text-muted md:order-none md:w-auto">
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#how">How it works</a>
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#safety">Safety</a>
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#tutors">For tutors</a>
           <a className="whitespace-nowrap py-2 hover:text-ink" href="#faq">FAQ</a>
+          <a className="whitespace-nowrap py-2 text-clay hover:opacity-80 font-medium" href="/admin">Admin Dashboard</a>
         </nav>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <a href="/admin" className="hidden sm:inline-flex text-xs font-semibold px-3 py-1.5 rounded-full border border-line bg-card hover:bg-soft text-ink transition-colors">
+            Admin
+          </a>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main>
@@ -133,6 +142,7 @@ export default function Page() {
         <div className={wrap}>
           <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
             {footerLinks.map(([t, h]) => <li key={t}><a className="text-muted underline hover:text-ink" href={`${LIVE}${h}`}>{t}</a></li>)}
+            <li><a className="text-muted underline hover:text-ink" href="/admin">Admin Dashboard</a></li>
             <li><a className="text-muted underline hover:text-ink" href="mailto:chouksey.arnav@gmail.com">chouksey.arnav@gmail.com</a></li>
           </ul>
           <p className="mt-6 text-sm text-muted">© 2026 Teach for a Cause. Lessons are always free. We never handle money.</p>
