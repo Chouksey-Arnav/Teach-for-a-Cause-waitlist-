@@ -6,21 +6,25 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 function checkAdminAuth(req: Request): boolean {
-  const secretKey = process.env.ADMIN_SECRET_KEY;
-  if (!secretKey) {
-    // If no secret key is set in environment, allow access in development/beta
+  // Use ADMIN_PASSWORD as primary env var, fallback to ADMIN_SECRET_KEY
+  const expectedPassword = process.env.ADMIN_PASSWORD || process.env.ADMIN_SECRET_KEY;
+  if (!expectedPassword) {
+    // If no password is set in environment, allow access
     return true;
   }
-  const authHeader = req.headers.get("x-admin-key") || req.headers.get("authorization");
+  const authHeader =
+    req.headers.get("x-admin-password") ||
+    req.headers.get("x-admin-key") ||
+    req.headers.get("authorization");
   if (!authHeader) return false;
   const provided = authHeader.replace(/^Bearer\s+/i, "").trim();
-  return provided === secretKey;
+  return provided === expectedPassword;
 }
 
-// GET: Fetch all waitlist signups with real-time statistics
+// GET: Fetch all waitlist signups and pending OTP verification sessions
 export async function GET(req: Request) {
   if (!checkAdminAuth(req)) {
-    return fail(401, "Unauthorized: Invalid or missing admin key.");
+    return fail(401, "Unauthorized: Invalid or missing password.");
   }
 
   const supabase = adminClient();
@@ -28,20 +32,28 @@ export async function GET(req: Request) {
     return fail(500, NOT_SET_UP);
   }
 
-  const { data: signups, error } = await supabase
-    .from("waitlist_signups")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const [signupsRes, otpsRes] = await Promise.all([
+    supabase
+      .from("waitlist_signups")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("waitlist_otps")
+      .select("id, email, role, grade, instrument, county, attempts, expires_at, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
 
-  if (error) {
-    console.error("Error fetching signups:", error);
+  if (signupsRes.error) {
+    console.error("Error fetching signups:", signupsRes.error);
     return fail(500, SERVER_ERROR);
   }
 
   return NextResponse.json(
     {
       ok: true,
-      signups: signups ?? [],
+      signups: signupsRes.data ?? [],
+      otps: otpsRes.data ?? [],
       fetchedAt: new Date().toISOString(),
     },
     {
@@ -57,7 +69,7 @@ export async function GET(req: Request) {
 // PATCH: Update signup status (e.g., mark as 'notified' or back to 'waiting')
 export async function PATCH(req: Request) {
   if (!checkAdminAuth(req)) {
-    return fail(401, "Unauthorized: Invalid or missing admin key.");
+    return fail(401, "Unauthorized: Invalid or missing password.");
   }
 
   let body: Record<string, unknown>;
@@ -98,7 +110,7 @@ export async function PATCH(req: Request) {
 // DELETE: Remove a signup record
 export async function DELETE(req: Request) {
   if (!checkAdminAuth(req)) {
-    return fail(401, "Unauthorized: Invalid or missing admin key.");
+    return fail(401, "Unauthorized: Invalid or missing password.");
   }
 
   const { searchParams } = new URL(req.url);

@@ -21,18 +21,31 @@ See `.env.example`. Generate `OTP_SECRET` and `RATE_LIMIT_SALT` with `openssl ra
 ## Database
 Run the files in `supabase/migrations` in order (waitlist, then waitlist_otp). A daily job removes rows 30 days after `notified_at` and clears expired codes.
 
-### Recommended Supabase SQL for Admin Performance
-For optimal admin dashboard sorting and querying speed in the Supabase SQL editor:
-```sql
--- Ensure fast sorting and dashboard loading for all signups
-create index if not exists waitlist_signups_created_at_idx on public.waitlist_signups (created_at desc);
-```
+## Supabase Admin Queries
+All ready-to-run administrative queries are saved in `supabase/admin_queries.sql` so you can easily copy and paste them directly into Supabase.
+
+### Where to navigate in Supabase:
+1. Log in to [Supabase Dashboard](https://supabase.com/dashboard).
+2. Select your project (**Teach for a Cause waitlist**).
+3. In the left navigation sidebar, click on **SQL Editor** (icon: `>_`).
+4. Click **+ New query** in the top bar.
+5. Open `supabase/admin_queries.sql` in this repo, copy whichever query block you need, paste it into the editor, and click **Run** (or `Ctrl+Enter` / `Cmd+Enter`).
+
+Queries available in `supabase/admin_queries.sql`:
+- **Performance indexes**: Speeds up admin dashboard queries and real-time polling.
+- **View all signups**: Lists all verified registrations with roles, grades, instruments, emails, and statuses.
+- **Summary statistics**: Live counts of middle school students, high school tutors, and waiting vs notified.
+- **Breakdown by instrument**: See waitlist counts per musical instrument.
+- **Breakdown by county**: Regional distribution across North Carolina counties.
+- **Pending OTP sessions**: View active verification codes sent via email that haven't been completed yet.
+- **Rate limit log**: Inspect recent hashed request activity.
+- **Status updates & deletions**: SQL templates to mark rows as notified, revert to waiting, or delete test records.
 
 ## Admin Dashboard Access
 The public links to the admin dashboard have been removed for confidentiality.
 - **Direct link**: `/admin`
 - **Discreet entry**: Click on the word `"district"` at the end of the footer disclaimer on the homepage (`Not affiliated with or endorsed by any school or school district.`).
-- **Security**: Set `ADMIN_SECRET_KEY` in your environment (Vercel / Supabase) to password-protect the admin dashboard.
+- **Password Protection**: Set `ADMIN_PASSWORD` in your Vercel environment variables (or `.env.local` for local development). When set, the `/admin` portal will strictly require this password to access and view all waitlist and Supabase records.
 
 ## Run locally
 ```
